@@ -110,6 +110,26 @@ python talktype.py --api http://localhost:8002/transcribe
 python talktype.py --language es  # Spanish
 ```
 
+### OpenAI-Compatible APIs
+
+TalkType supports any OpenAI-compatible transcription API, so you can use different backends like Whisper, Parakeet, or Whisper Turbo:
+
+```bash
+# OpenAI API
+python talktype.py --api https://api.openai.com/v1/audio/transcriptions --api-model whisper-1
+
+# Groq (super fast)
+python talktype.py --api https://api.groq.com/openai/v1/audio/transcriptions --api-model whisper-large-v3
+
+# Local OpenAI-compatible server (e.g., faster-whisper-server, whisper.cpp)
+python talktype.py --api http://localhost:8080/v1/audio/transcriptions --api-model whisper-1
+
+# Any custom server
+python talktype.py --api http://localhost:8002/transcribe
+```
+
+TalkType auto-detects OpenAI-compatible endpoints by URL pattern. For custom servers, it uses a simpler format that works with most Whisper APIs.
+
 ### Model Sizes
 
 | Model | Size | Speed | Accuracy | VRAM |

@@ -89,6 +89,11 @@ Examples:
         help="Whisper API URL (if not set, uses local faster-whisper)"
     )
     parser.add_argument(
+        "--api-model",
+        default=None,
+        help="Model name for OpenAI-compatible APIs (default: whisper-1)"
+    )
+    parser.add_argument(
         "--model", "-m",
         default=DEFAULT_MODEL,
         help=f"Whisper model size: tiny, base, small, medium, large-v3 (default: {DEFAULT_MODEL})"
@@ -352,6 +357,40 @@ def has_speech(audio: np.ndarray, threshold: float = 0.01) -> bool:
     return energy > threshold
 
 
+def is_openai_api(url: str) -> bool:
+    """Check if URL looks like an OpenAI-compatible API."""
+    openai_patterns = ["/v1/audio/transcriptions", "/v1/audio/", "openai", "groq", "deepgram"]
+    return any(p in url.lower() for p in openai_patterns)
+
+
+def transcribe_api(wav_buffer: io.BytesIO) -> str:
+    """Transcribe using API (supports OpenAI-compatible and custom APIs)."""
+    wav_buffer.seek(0)
+
+    if is_openai_api(config.api):
+        # OpenAI-compatible API format
+        files = {"file": ("audio.wav", wav_buffer, "audio/wav")}
+        data = {
+            "model": config.api_model or "whisper-1",
+            "language": config.language,
+            "response_format": "json"
+        }
+    else:
+        # Custom API format (e.g., local faster-whisper server)
+        files = {"file": ("audio.wav", wav_buffer, "audio/wav")}
+        data = {"language": config.language}
+
+    resp = requests.post(config.api, files=files, data=data, timeout=60)
+    resp.raise_for_status()
+
+    # Handle both JSON {"text": "..."} and plain text responses
+    try:
+        result = resp.json()
+        return result.get("text", "").strip()
+    except:
+        return resp.text.strip()
+
+
 def transcribe(audio: np.ndarray) -> str:
     """Transcribe audio to text."""
     if len(audio) < SAMPLE_RATE * 0.5:  # < 500ms
@@ -368,15 +407,7 @@ def transcribe(audio: np.ndarray) -> str:
     wav_buffer.seek(0)
 
     if config.api:
-        # Use API
-        resp = requests.post(
-            config.api,
-            files={"file": ("audio.wav", wav_buffer, "audio/wav")},
-            data={"language": config.language},
-            timeout=60
-        )
-        resp.raise_for_status()
-        return resp.json().get("text", "").strip()
+        return transcribe_api(wav_buffer)
     else:
         # Use local model
         wav_buffer.seek(0)
