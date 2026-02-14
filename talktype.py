@@ -103,6 +103,11 @@ Examples:
         default=LANGUAGE,
         help=f"Language code for transcription (default: {LANGUAGE})"
     )
+    parser.add_argument(
+        "--minimal", "-M",
+        action="store_true",
+        help="Minimal UI - only show status (great for demos)"
+    )
     return parser.parse_args()
 
 
@@ -179,6 +184,36 @@ def beep_error():
 
 def beep_success():
     beep(660, 0.08)
+
+
+# === Terminal Title (visual status) ===
+def set_terminal_title(title: str):
+    """Set terminal window title for visual status."""
+    # ANSI escape sequence to set terminal title
+    sys.stdout.write(f"\033]0;{title}\007")
+    sys.stdout.flush()
+
+
+def show_status(status: str, detail: str = ""):
+    """Show status in minimal mode (clears and centers)."""
+    if not config.minimal:
+        if detail:
+            print(f"{status} {detail}")
+        else:
+            print(status)
+        return
+
+    # Clear screen and show centered status
+    sys.stdout.write("\033[2J\033[H")  # Clear screen, move to top
+    sys.stdout.write("\n" * 8)  # Padding from top
+    sys.stdout.write(f"{'─' * 40}\n")
+    sys.stdout.write(f"{status:^40}\n")
+    if detail:
+        # Truncate detail if too long
+        detail = detail[:36] + "..." if len(detail) > 36 else detail
+        sys.stdout.write(f"{detail:^40}\n")
+    sys.stdout.write(f"{'─' * 40}\n")
+    sys.stdout.flush()
 
 
 # === Window Management (OS-specific) ===
@@ -272,6 +307,8 @@ def start_recording():
     )
     stream.start()
     beep_start()
+    set_terminal_title("🎤 RECORDING...")
+    show_status("🎤 RECORDING", "Press hotkey to stop")
 
 
 def stop_recording() -> np.ndarray:
@@ -282,6 +319,8 @@ def stop_recording() -> np.ndarray:
         stream.close()
         stream = None
     beep_stop()
+    set_terminal_title("⏳ Transcribing...")
+    show_status("⏳ TRANSCRIBING", "Processing speech...")
 
     if not audio_chunks:
         return np.array([], dtype=np.float32)
@@ -289,9 +328,37 @@ def stop_recording() -> np.ndarray:
 
 
 # === Transcription ===
+# Common Whisper hallucinations on silence/noise
+HALLUCINATIONS = [
+    "thanks for watching", "thank you for watching", "thanks for listening",
+    "thank you for listening", "subscribe", "like and subscribe",
+    "see you next time", "bye", "goodbye", "the end",
+    "silence", "no speech", "inaudible", "[music]", "(music)",
+    "you", "i", "so", "uh", "um", "hmm", "huh", "ah", "oh",
+]
+
+
+def is_hallucination(text: str) -> bool:
+    """Check if text is likely a Whisper hallucination."""
+    t = text.lower().strip()
+    if len(t) < 3:
+        return True
+    return any(h in t for h in HALLUCINATIONS) and len(t) < 30
+
+
+def has_speech(audio: np.ndarray, threshold: float = 0.01) -> bool:
+    """Check if audio contains actual speech (energy-based)."""
+    energy = np.sqrt(np.mean(audio ** 2))
+    return energy > threshold
+
+
 def transcribe(audio: np.ndarray) -> str:
     """Transcribe audio to text."""
-    if len(audio) < SAMPLE_RATE * 0.3:  # < 300ms
+    if len(audio) < SAMPLE_RATE * 0.5:  # < 500ms
+        return ""
+
+    # Check if audio has enough energy (not just silence)
+    if not has_speech(audio):
         return ""
 
     # Convert to int16 WAV
@@ -371,19 +438,26 @@ def transcribe_and_paste(audio: np.ndarray):
     global state
     try:
         text = transcribe(audio)
-        if text:
-            print(f">>> {text}")
+        if text and not is_hallucination(text):
             paste_text(" " + text)  # Space to separate from previous
             beep_success()
+            set_terminal_title("TalkType ✅")
+            show_status("✅ DONE", text[:50])
         else:
-            print("(empty)")
             beep_error()
+            set_terminal_title("TalkType")
+            show_status("❌ NO SPEECH", "Nothing detected")
     except Exception as e:
-        print(f"Error: {e}")
         beep_error()
+        set_terminal_title("TalkType ❌")
+        show_status("❌ ERROR", str(e)[:30])
     finally:
         with state_lock:
             state = State.IDLE
+        # Reset to ready after a moment
+        time.sleep(1.5)
+        set_terminal_title("TalkType - Ready")
+        show_status("● READY", "Press F9 to record")
 
 
 def get_hotkey(key_name: str):
@@ -409,11 +483,9 @@ def create_hotkey_handler(hotkey):
             if state == State.IDLE:
                 state = State.RECORDING
                 start_recording()
-                print("Recording...")
             elif state == State.RECORDING:
                 state = State.TRANSCRIBING
                 audio = stop_recording()
-                print("Transcribing...")
                 threading.Thread(
                     target=transcribe_and_paste,
                     args=(audio,),
@@ -436,8 +508,13 @@ def main():
     load_whisper_model()
 
     hotkey = get_hotkey(config.hotkey)
-    print(f"\nReady! Press {config.hotkey.upper()} to record.")
-    print("Press Ctrl+C to exit.\n")
+    set_terminal_title("TalkType - Ready")
+
+    if config.minimal:
+        show_status("● READY", f"Press {config.hotkey.upper()} to record")
+    else:
+        print(f"\nReady! Press {config.hotkey.upper()} to record.")
+        print("Press Ctrl+C to exit.\n")
 
     handler = create_hotkey_handler(hotkey)
     with keyboard.Listener(on_press=handler) as listener:
