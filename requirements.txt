@@ -1,0 +1,18 @@
+# Core dependencies (all platforms)
+numpy>=1.24.0
+scipy>=1.10.0
+sounddevice>=0.4.6
+pynput>=1.7.6
+pyperclip>=1.8.2
+requests>=2.28.0
+
+# Local transcription (optional - can use --api instead)
+faster-whisper>=0.10.0
+
+# Whisper API server (optional - for running whisper_server.py)
+fastapi>=0.100.0
+uvicorn>=0.22.0
+python-multipart>=0.0.6
+
+# Windows/macOS keyboard simulation (Linux uses xdotool)
+pyautogui>=0.9.53; sys_platform != 'linux'
