@@ -333,13 +333,15 @@ def stop_recording() -> np.ndarray:
 
 # === Transcription ===
 # Common Whisper hallucinations on silence/noise
-HALLUCINATIONS = [
+# Phrases that indicate Whisper is hallucinating on silence
+HALLUCINATION_PHRASES = [
     "thanks for watching", "thank you for watching", "thanks for listening",
     "thank you for listening", "subscribe", "like and subscribe",
-    "see you next time", "bye", "goodbye", "the end",
-    "silence", "no speech", "inaudible", "[music]", "(music)",
-    "you", "i", "so", "uh", "um", "hmm", "huh", "ah", "oh",
+    "see you next time", "the end", "silence", "no speech",
+    "inaudible", "[music]", "(music)",
 ]
+# Single words that are hallucinations when they're the ENTIRE output
+HALLUCINATION_WORDS = {"you", "i", "so", "uh", "um", "hmm", "huh", "ah", "oh", "bye", "goodbye"}
 
 
 def is_hallucination(text: str) -> bool:
@@ -347,13 +349,34 @@ def is_hallucination(text: str) -> bool:
     t = text.lower().strip()
     if len(t) < 3:
         return True
-    return any(h in t for h in HALLUCINATIONS) and len(t) < 30
+    # Check if entire text is just a hallucination word
+    if t in HALLUCINATION_WORDS:
+        return True
+    # Check for hallucination phrases in short outputs
+    if len(t) < 40:
+        return any(phrase in t for phrase in HALLUCINATION_PHRASES)
+    return False
 
 
-def has_speech(audio: np.ndarray, threshold: float = 0.01) -> bool:
-    """Check if audio contains actual speech (energy-based)."""
-    energy = np.sqrt(np.mean(audio ** 2))
-    return energy > threshold
+def has_speech(audio: np.ndarray, threshold: float = 0.01, segment_ms: int = 50) -> bool:
+    """Check if audio contains actual speech using segment-based detection.
+
+    Instead of averaging energy over the entire recording (which dilutes
+    short phrases surrounded by silence), this checks if ANY segment
+    exceeds the threshold. This catches quick phrases much better.
+    """
+    segment_samples = int(SAMPLE_RATE * segment_ms / 1000)
+
+    # Check each segment for speech
+    for i in range(0, len(audio), segment_samples):
+        segment = audio[i:i + segment_samples]
+        if len(segment) < segment_samples // 2:
+            continue  # Skip tiny trailing segments
+        energy = np.sqrt(np.mean(segment ** 2))
+        if energy > threshold:
+            return True
+
+    return False
 
 
 def is_openai_api(url: str) -> bool:

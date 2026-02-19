@@ -162,19 +162,23 @@ No test suite. Manual testing workflow:
    pactl set-default-source alsa_input.usb-YOUR_DEVICE_NAME
    ```
 
-2. **Audio energy below threshold** — The `has_speech()` function in `talktype.py` rejects audio with energy < 0.01
+2. **Audio energy below threshold** — The `has_speech()` function uses segment-based detection (50ms chunks) with a 0.01 energy threshold. This handles quick phrases well, but very quiet speech may still be missed.
    ```bash
-   # Test your mic levels:
+   # Test your mic levels (speak normally during recording):
    python -c "
    import sounddevice as sd
    import numpy as np
    audio = sd.rec(32000, samplerate=16000, channels=1, dtype='float32')
    sd.wait()
-   energy = np.sqrt(np.mean(audio ** 2))
-   print(f'Energy: {energy:.4f} (threshold: 0.01)')
+   # Check peak segment energy (same as has_speech uses)
+   segment_size = 800  # 50ms at 16kHz
+   max_energy = max(np.sqrt(np.mean(audio[i:i+segment_size]**2))
+                    for i in range(0, len(audio), segment_size)
+                    if len(audio[i:i+segment_size]) >= 400)
+   print(f'Peak segment energy: {max_energy:.4f} (threshold: 0.01)')
    "
    ```
-   If energy is below 0.01, either increase mic gain or lower the threshold in code.
+   If peak energy is below 0.01, increase mic gain in system settings.
 
 3. **Whisper server not running** — When using `--api` mode
    ```bash
