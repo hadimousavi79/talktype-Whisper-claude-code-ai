@@ -29,6 +29,64 @@ python whisper_server.py --model base  # Terminal 1
 python talktype.py --api http://localhost:8002/transcribe  # Terminal 2
 ```
 
+## GPU Acceleration
+
+For ~10x faster transcription on NVIDIA GPUs, install CUDA libraries:
+
+```bash
+pip install nvidia-cublas-cu12 nvidia-cudnn-cu12
+```
+
+The server auto-detects these and configures CUDA paths. Defaults to `device=cuda` and `compute=float16`.
+
+## Systemd Services (Linux)
+
+For 24/7 operation, create user services:
+
+**~/.config/systemd/user/whisper-server.service:**
+```ini
+[Unit]
+Description=Whisper Transcription Server (GPU)
+After=graphical-session.target
+
+[Service]
+Type=simple
+WorkingDirectory=/path/to/talktype
+ExecStart=/path/to/talktype/venv/bin/python whisper_server.py --model base
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+```
+
+**~/.config/systemd/user/voice-dictation.service:**
+```ini
+[Unit]
+Description=TalkType Voice Dictation
+After=graphical-session.target whisper-server.service
+Requires=whisper-server.service
+
+[Service]
+Type=simple
+WorkingDirectory=/path/to/talktype
+ExecStart=/path/to/talktype/venv/bin/python talktype.py --api http://localhost:8002/transcribe
+Restart=on-failure
+RestartSec=5
+Environment=DISPLAY=:0
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+
+[Install]
+WantedBy=default.target
+```
+
+Enable and start:
+```bash
+systemctl --user daemon-reload
+systemctl --user enable whisper-server.service voice-dictation.service
+systemctl --user start whisper-server.service voice-dictation.service
+```
+
 ## Architecture
 
 Two main files:
