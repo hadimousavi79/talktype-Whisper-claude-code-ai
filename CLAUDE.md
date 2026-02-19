@@ -24,9 +24,9 @@ pip install -r requirements.txt
 # Direct mode (loads model on startup)
 python talktype.py
 
-# Server mode (recommended for development - faster restarts)
-python whisper_server.py --model base  # Terminal 1
-python talktype.py --api http://localhost:8002/transcribe  # Terminal 2
+# Server mode (recommended - faster restarts, GPU acceleration)
+python whisper_server.py --model medium  # Terminal 1 (or base/small for faster)
+python talktype.py --api http://localhost:8002/transcribe --language en  # Terminal 2
 ```
 
 ## CLI Flags
@@ -79,7 +79,7 @@ After=graphical-session.target
 [Service]
 Type=simple
 WorkingDirectory=/path/to/talktype
-ExecStart=/path/to/talktype/venv/bin/python whisper_server.py --model base
+ExecStart=/path/to/talktype/venv/bin/python whisper_server.py --model medium
 Restart=on-failure
 RestartSec=5
 
@@ -97,7 +97,7 @@ Requires=whisper-server.service
 [Service]
 Type=simple
 WorkingDirectory=/path/to/talktype
-ExecStart=/path/to/talktype/venv/bin/python talktype.py --api http://localhost:8002/transcribe
+ExecStart=/path/to/talktype/venv/bin/python talktype.py --api http://localhost:8002/transcribe --language en
 Restart=on-failure
 RestartSec=5
 Environment=DISPLAY=:0
