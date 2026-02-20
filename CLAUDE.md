@@ -12,6 +12,11 @@ TalkType is a push-to-talk voice typing tool that works system-wide. Press F9, s
 # Linux dependencies
 sudo apt install xdotool xclip portaudio19-dev
 
+# macOS dependencies
+brew install portaudio
+
+# Windows - no additional dependencies needed
+
 # Python environment
 python3 -m venv venv
 source venv/bin/activate
@@ -55,6 +60,13 @@ python talktype.py --api http://localhost:8002/transcribe --language en  # Termi
 | `/health` | GET | Server status and config |
 | `/transcribe` | POST | Transcribe audio (multipart: `file`, `language`, `model`) |
 | `/docs` | GET | Interactive Swagger UI |
+
+### OpenAI-Compatible APIs
+
+TalkType auto-detects OpenAI-compatible endpoints by URL pattern. Use `--api-model` for custom model names:
+```bash
+python talktype.py --api https://api.groq.com/openai/v1/audio/transcriptions --api-model whisper-large-v3
+```
 
 ## GPU Acceleration
 
@@ -180,6 +192,12 @@ pactl set-source-volume YOUR_SOURCE_NAME 200%
 ### Wayland
 
 pynput requires X11. On Wayland, run with `GDK_BACKEND=x11` or switch to X11 session.
+
+### macOS Accessibility Permissions
+
+macOS requires accessibility permissions for keyboard monitoring:
+1. System Preferences → Security & Privacy → Privacy → Accessibility
+2. Add your terminal app (Terminal, iTerm, etc.)
 
 ### Broken venv
 
