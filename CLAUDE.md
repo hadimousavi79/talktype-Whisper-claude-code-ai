@@ -68,31 +68,15 @@ The server auto-detects these and configures CUDA paths. Defaults to `device=cud
 
 ## Systemd Services (Linux)
 
-For 24/7 operation, create user services:
+For 24/7 operation, create a user service for TalkType.
 
-**~/.config/systemd/user/whisper-server.service:**
-```ini
-[Unit]
-Description=Whisper Transcription Server (GPU)
-After=graphical-session.target
-
-[Service]
-Type=simple
-WorkingDirectory=/path/to/talktype
-ExecStart=/path/to/talktype/venv/bin/python whisper_server.py --model medium
-Restart=on-failure
-RestartSec=5
-
-[Install]
-WantedBy=default.target
-```
+**Important:** TalkType shares the Whisper server with StellarSnip (`/mnt/hdd/Development/StellarSnip/stellarsnip-backend/services/whisper-transcription/`). Do NOT run a separate whisper-server.service — this causes port 8002 conflicts and crash loops.
 
 **~/.config/systemd/user/voice-dictation.service:**
 ```ini
 [Unit]
 Description=TalkType Voice Dictation
-After=graphical-session.target whisper-server.service
-Requires=whisper-server.service
+After=graphical-session.target
 
 [Service]
 Type=simple
@@ -110,8 +94,8 @@ WantedBy=default.target
 Enable and start:
 ```bash
 systemctl --user daemon-reload
-systemctl --user enable whisper-server.service voice-dictation.service
-systemctl --user start whisper-server.service voice-dictation.service
+systemctl --user enable voice-dictation.service
+systemctl --user start voice-dictation.service
 ```
 
 ## Architecture
@@ -202,4 +186,23 @@ pynput requires X11. On Wayland, run with `GDK_BACKEND=x11` or switch to X11 ses
 If you see "bad interpreter" errors, the venv has stale path references. Recreate it:
 ```bash
 rm -rf venv && python3 -m venv venv && ./venv/bin/pip install -r requirements.txt
+```
+
+### Port 8002 conflict / whisper-server crash loop
+
+**Symptom:** TalkType works intermittently. `systemctl --user status whisper-server.service` shows repeated restarts with "address already in use".
+
+**Cause:** Another Whisper server (e.g., StellarSnip) is already running on port 8002.
+
+**Solution:** TalkType shares the Whisper server with StellarSnip. Disable the duplicate:
+```bash
+# Check what's on port 8002
+lsof -i :8002
+
+# Disable TalkType's whisper-server (uses shared StellarSnip server)
+systemctl --user stop whisper-server.service
+systemctl --user disable whisper-server.service
+
+# Ensure voice-dictation.service doesn't depend on whisper-server.service
+# (remove Requires= and whisper-server.service from After= in the unit file)
 ```
